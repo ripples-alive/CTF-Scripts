@@ -19,7 +19,7 @@ Then you can update this tool by simply executing `git pull`.
 
 ## Usage
 
-1. This util will automatically export all functions in [pwntools]. So you can omit `from pwn import *` if you already use `from utils import *`.
+1. This util will automatically export all functions in [pwntools]. So you can omit `from pwn import *` if you already use `from ctf import *`.
 
 1. Some functions / methods in [pwntools] are enhanced:
 
@@ -52,7 +52,7 @@ Then you can update this tool by simply executing `git pull`.
 1. Use `ext_interactive` to input unprintable chars：
 
     ```python
-    >>> from utils import *
+    >>> from ctf import *
     >>> io = process('cat')
     [+] Started program 'cat'
     >>> io.sendline('0\x30 A\x41')
@@ -67,7 +67,7 @@ Then you can update this tool by simply executing `git pull`.
 1. use `gdb` to debug：
 
     ```python
-    >>> from utils import *
+    >>> from ctf import *
     >>> io = debug('cat')
     [x] Starting program '/usr/local/bin/gdb' argv=['gdb', 'cat']    [+] Starting program '/usr/local/bin/gdb' argv=['gdb', 'cat'] : Done
     >>> # io.b('main') <=> io.sendline('b main')
