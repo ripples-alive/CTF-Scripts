@@ -11,12 +11,13 @@ from pwn import *
 
 __all__ = [
     'factor', 'gcd', 'ext_euclid', 'rsa_decrypt',
-    'ljust', 'rjust',
+    'unhex', 'ljust', 'rjust', 'gzipc', 'gzipd',
     'debug',
 ]
 
 # export all imported from pwn
 __all__ += [i for i in dir(pwn) if not i.startswith('__')]
+__all__ = list(set(__all__))
 
 
 #############################
@@ -97,17 +98,17 @@ def rjust(s, n, c=None):
         return s.rjust(n, c)
 
 
-def gzip_decompress(s):
-    return gzip.GzipFile(fileobj=StringIO.StringIO(s)).read()
-
-
-def gzip_compress(s, compresslevel=9):
+def gzipc(s, compresslevel=9):
     io = StringIO.StringIO()
     gp = gzip.GzipFile(mode='w', compresslevel=compresslevel, fileobj=io)
     gp.write(s)
     gp.close()
     io.seek(0)
     return io.read()
+
+
+def gzipd(s):
+    return gzip.GzipFile(fileobj=StringIO.StringIO(s)).read()
 
 
 #######################
