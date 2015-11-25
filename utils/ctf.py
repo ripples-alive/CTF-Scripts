@@ -118,14 +118,20 @@ def gzipd(s):
 def debug(args, shell=False, executable=None, cwd=None, env=None, timeout=pwnlib.timeout.Timeout.default):
     if type(args) == str:
         args = [args]
-    args = ['gdb'] + args
-    io = process(args, shell, executable, cwd, env, timeout)
+    io = process(['gdb', args[0]], shell, executable, cwd, env, timeout)
     io.debug_mode = True
     io.sendline('set prompt {0} '.format(term.text.bold_red('gdb$')))
+    io.sendline('set args ' + ' '.join(args[1:]))
     return io
 
 
-def _gdb_break(self, addr):
+def _gdb_break(self, addr, need_interrupt=False):
+    if need_interrupt:
+        self.interrupt()
+        _gdb_break(self, addr)
+        self.c()
+        return
+
     if type(addr) == int or type(addr) == long:
         self.sendline('b *0x{0:x}'.format(addr))
     else:
@@ -133,14 +139,29 @@ def _gdb_break(self, addr):
 
 
 def _gdb_run(self):
-    self.sendline('r')
+    message = "Starting to run program %r" % self.program
+    with log.progress(message) as p:
+        self.sendline('r')
+        while not proc.children(proc.pidof(self)[0]):
+            sleep(0.01)
 
 
 def _gdb_continue(self):
-    self.sendline('c')
+    message = "Continuing to run program %r" % self.program
+    with log.progress(message) as p:
+        self.sendline('c')
+        self.recvline_endswith('Continuing.')
 
 
-def _gdb_interrupt(self):
+def _gdb_interrupt(self, timeout=0.1):
+    if timeout:
+        buf = self.recvrepeat(timeout)
+        _gdb_interrupt(self, 0)
+        # Make sure the process has been interrupted.
+        buf += self.recvuntil(term.text.bold_red('gdb$'))
+        self.unrecv(buf)
+        return
+
     for child in proc.children(proc.pidof(self)[0]):
         os.kill(child, signal.SIGINT)
 
@@ -155,7 +176,7 @@ def _ext_interactive(self, prompt=term.text.bold_red('$') + ' '):
     """
 
     def handler(signum, frame):
-        self.interrupt()
+        self.interrupt(0)
 
     old_handler = signal.signal(signal.SIGINT, handler)
 
@@ -192,11 +213,13 @@ def _ext_interactive(self, prompt=term.text.bold_red('$') + ' '):
                 # continue and exit interactive mode
                 try:
                     if data.strip() == 'c!':
-                        data = 'c\n'
                         go.set()
-                    data = safeeval.const(
-                        '"""{0}"""'.format(data.replace('"', r'\"')))
-                    self.send(data)
+                        sleep(0.05)
+                        self.c()
+                    else:
+                        data = safeeval.const(
+                            '"""{0}"""'.format(data.replace('"', r'\"')))
+                        self.send(data)
                 except ValueError:
                     log.warning('Illegal input, ignored!')
                 except EOFError:
