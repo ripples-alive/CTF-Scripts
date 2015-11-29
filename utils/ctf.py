@@ -250,15 +250,74 @@ def _sendlines(self, data):
         self.sendline(row)
 
 
+def _recvregex(self, regex, exact=False, group=None, **kwargs):
+    """recvregex(regex, exact = False, timeout = default) -> str
+    Wrapper around :func:`recvpred`, which will return when a regex
+    matches the string in the buffer.
+    By default :func:`re.RegexObject.search` is used, but if `exact` is
+    set to True, then :func:`re.RegexObject.match` will be used instead.
+    If the request is not satisfied before ``timeout`` seconds pass,
+    all data is buffered and an empty string (``''``) is returned.
+    """
+
+    if isinstance(regex, (str, unicode)):
+        regex = re.compile(regex)
+
+    if exact:
+        pred = regex.match
+    else:
+        pred = regex.search
+
+    data = self.recvpred(pred, **kwargs)
+    if group is None:
+        return data
+    match = pred(data)
+    if hasattr(group, '__iter__'):
+        return match.group(*group)
+    return match.group(group)
+
+
+def _recvline_regex(self, regex, exact=False, group=None, **kwargs):
+    """recvregex(regex, exact = False, keepends = False, timeout = default) -> str
+    Wrapper around :func:`recvline_pred`, which will return when a regex
+    matches a line.
+    By default :func:`re.RegexObject.search` is used, but if `exact` is
+    set to True, then :func:`re.RegexObject.match` will be used instead.
+    If the request is not satisfied before ``timeout`` seconds pass,
+    all data is buffered and an empty string (``''``) is returned.
+    """
+
+    if isinstance(regex, (str, unicode)):
+        regex = re.compile(regex)
+
+    if exact:
+        pred = regex.match
+    else:
+        pred = regex.search
+
+    data = self.recvline_pred(pred, **kwargs)
+    if group is None:
+        return data
+    match = pred(data)
+    if hasattr(group, '__iter__'):
+        return match.group(*group)
+    return match.group(group)
+
+
 pwnlib.tubes.tube.tube.debug_mode = False
 pwnlib.tubes.tube.tube.b = _gdb_break
 pwnlib.tubes.tube.tube.r = _gdb_run
 pwnlib.tubes.tube.tube.c = _gdb_continue
 pwnlib.tubes.tube.tube.interrupt = _gdb_interrupt
 
+pwnlib.tubes.tube.tube._interactive = pwnlib.tubes.tube.tube.interactive
+pwnlib.tubes.tube.tube.interactive = _ext_interactive
 pwnlib.tubes.tube.tube._send = pwnlib.tubes.tube.tube.send
 pwnlib.tubes.tube.tube.send = _send
 pwnlib.tubes.tube.tube._sendline = pwnlib.tubes.tube.tube.sendline
 pwnlib.tubes.tube.tube.sendline = _sendline
 pwnlib.tubes.tube.tube.sendlines = _sendlines
-pwnlib.tubes.tube.tube.ext_interactive = _ext_interactive
+pwnlib.tubes.tube.tube._recvregex = pwnlib.tubes.tube.tube.recvregex
+pwnlib.tubes.tube.tube.recvregex = _recvregex
+pwnlib.tubes.tube.tube._recvline_regex = pwnlib.tubes.tube.tube.recvline_regex
+pwnlib.tubes.tube.tube.recvline_regex = _recvline_regex

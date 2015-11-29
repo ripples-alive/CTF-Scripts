@@ -27,6 +27,10 @@ Then you can update this tool by simply executing `git pull`.
 
     * tube.send, tube.sendline: automatically convert input data to string
 
+    * tube.recvregex, tube.recvline_regex: add group param to get result of `pattern.group`
+
+    * tube.interactive: support python style strings for interactive shell
+
 1. Add some extra functions / methods for exp writing:
 
     * ljust / rjust: similar to str.ljust / str.rjust, but with length check
@@ -34,8 +38,6 @@ Then you can update this tool by simply executing `git pull`.
     * tube.sendlines: send multiple lines in one command
 
     * debug: run gdb for debugging
-
-    * tube.ext_interactive: interactive shell with python style string supported
 
     * tube.b, tube.r, tube.c, tube.interrupt: short hand for command in gdb
 
@@ -49,7 +51,7 @@ Then you can update this tool by simply executing `git pull`.
 
     * rsa_decrypt: decrypt RSA encrypted message
 
-1. Use `ext_interactive` to input unprintable chars：
+1. Use `interactive` to input unprintable chars:
 
     ```python
     >>> from ctf import *
@@ -58,11 +60,15 @@ Then you can update this tool by simply executing `git pull`.
     >>> io.sendline('0\x30 A\x41')
     >>> io.recvline(False)
     '00 AA'
-    >>> io.ext_interactive()
+    >>> io.interactive()
     [*] Switching to extensive interactive mode
     A\x410\x30
     AA00
     ```
+
+    *PS:*
+    1. *previous `ext_interactive` is abandoned.*
+    1. *`tube._interactive` points to the original interactive of [pwntools].*
 
 1. use `gdb` to debug：
 
@@ -74,7 +80,7 @@ Then you can update this tool by simply executing `git pull`.
     >>> # io.b(0x08040000) <=> io.sendline('b * 0x08040000')
     >>> # io.c() <=> io.sendline('c')
     >>> io.r() # <=> io.sendline('r')
-    >>> io.ext_interactive()
+    >>> io.interactive()
     [*] Switching to extensive interactive mode    GNU gdb (GDB) 7.9    ...
     Reading symbols from cat...(no debugging symbols found)...done.
     gdb-peda$ gdb$ Starting program: /bin/cat    0\x30\t\x41A    00	AA
