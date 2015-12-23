@@ -20,35 +20,44 @@ def run_with_retry(cmd, max_retry=2):
     return status, output
 
 
+def pwn_one(aim):
+    cmd = config['cmd'].format(id=aim)
+    if platform.system() == 'Darwin':
+        status, flag = run_with_retry('gtimeout %d %s' % (config['timeout'], cmd))
+    else:
+        status, flag = run_with_retry('timeout %d %s' % (config['timeout'], cmd))
+    print '(ID = %d) status: %d, flag: %s' % (aim, status, abstract(flag))
+    if status == 0:
+        flag = flag.strip()
+        result = submit_with_retry(flag)
+        record_in_db({
+            'id': aim,
+            'service': config['service'],
+            'flag': flag,
+            'result': result
+        })
+        if result is True:
+            log('out.log', '(ID = %d) %s' % (aim, flag))
+        elif result is not False:
+            log('error.log', '(ID = %d) %s => %s' % (aim, flag, result))
+
+
 def pwn(config):
     global aim
     os.chdir(config['script'])
     log('out.log', 'PWN start')
     for aim in config['ids']:
-        cmd = config['cmd'].format(id=aim)
-        if platform.system() == 'Darwin':
-            status, flag = run_with_retry('gtimeout %d %s' % (config['timeout'], cmd))
-        else:
-            status, flag = run_with_retry('timeout %d %s' % (config['timeout'], cmd))
-        print '(ID = %d) status: %d, flag: %s' % (aim, status, abstract(flag))
-        if status == 0:
-            flag = flag.strip()
-            result = submit_with_retry(flag)
-            record_in_db({
-                'id': aim,
-                'service': config['service'],
-                'flag': flag,
-                'result': result
-            })
-            if result is True:
-                log('out.log', '(ID = %d) %s' % (aim, flag))
-            elif result is not False:
-                log('error.log', '(ID = %d) %s => %s' % (aim, flag, result))
+        if os.fork() == 0:
+            pwn_one(aim)
+            exit()
+    for aim in config['ids']:
+        os.wait()
     log('out.log', 'PWN stop')
 
 
 if __name__ == '__main__':
     while True:
+        round_time = time.time()
         print '=' * 50, time.asctime(), '=' * 50
         problems = json.load(open('config.json'))
         for config in problems:
@@ -57,4 +66,6 @@ if __name__ == '__main__':
                 pwn(config)
                 print 'PWN %s stop' % config['script']
                 exit()
-        time.sleep(60)
+            os.wait()
+        while time.time() - round_time < 60:
+            time.sleep(1)
