@@ -5,6 +5,7 @@ import platform
 import commands
 import json
 import time
+import sys
 import os
 
 from common import *
@@ -27,6 +28,7 @@ def pwn_one(aim):
     else:
         status, flag = run_with_retry('timeout %d %s' % (config['timeout'], cmd))
     print '(ID = %d) status: %d, flag: %s' % (aim, status, abstract(flag))
+    sys.stdout.flush()
     if status == 0:
         flag = flag.strip()
         result = submit_with_retry(flag)
@@ -61,8 +63,10 @@ if __name__ == '__main__':
         print '=' * 50, time.asctime(), '=' * 50
         problems = json.load(open('config.json'))
         for config in problems:
+            sys.stdout.flush()
             if os.fork() == 0:
                 print 'PWN %s start' % config['script']
+                sys.stdout.flush()
                 pwn(config)
                 print 'PWN %s stop' % config['script']
                 exit()
