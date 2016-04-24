@@ -27,8 +27,7 @@ def pwn_one(aim):
         status, flag = run_with_retry('gtimeout %d %s' % (config['timeout'], cmd))
     else:
         status, flag = run_with_retry('timeout %d %s' % (config['timeout'], cmd))
-    print '(ID = %d) status: %d, flag: %s' % (aim, status, abstract(flag))
-    sys.stdout.flush()
+    sys.stdout.write('(ID = %d) status: %d, flag: %s\n' % (aim, status, abstract(flag)))
     if status == 0:
         flag = flag.strip()
         result = submit_with_retry(flag)
@@ -63,10 +62,8 @@ if __name__ == '__main__':
         print '=' * 50, time.asctime(), '=' * 50
         problems = json.load(open('config.json'))
         for config in problems:
-            sys.stdout.flush()
             if os.fork() == 0:
                 print 'PWN %s start' % config['script']
-                sys.stdout.flush()
                 pwn(config)
                 print 'PWN %s stop' % config['script']
                 exit()

@@ -10,12 +10,13 @@ from common import *
 class FlagHandler(SocketServer.StreamRequestHandler):
 
     def handle(self):
-        content = self.rfile.read().strip()
+        content = self.rfile.read().strip().strip('\x00').replace('\n', '')
         ip = self.client_address[0]
 
         try:
             info = json.loads(content)
-            assert info['flag'] and info['service']
+            assert info['flag'] is not None and info['service'] is not None
+            info['flag'] = info['flag'].strip()
         except Exception, e:
             info = {'flag': content, 'service': None}
         if 'id' not in info:

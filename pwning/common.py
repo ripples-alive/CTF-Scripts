@@ -14,10 +14,18 @@ def submit_flag(flag):
     others => error info
     """
     import random
-    return random.choice([True, False, 'error info'])
+    content = random.choice(['correct', 'duplicated', 'error info'])
+    if content == 'duplicated':
+        return False
+    if content == 'correct':
+        return True
+    return content
 
 
 def submit_with_retry(flag):
+    flag = flag.strip()
+    if not flag:
+        return 'empty flag'
     retry = 0
     result = ''
     while retry < 3:
