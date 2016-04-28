@@ -4,7 +4,7 @@
 import os
 import gzip
 import signal
-import StringIO
+from cStringIO import StringIO
 
 import pwn
 from pwn import *
@@ -100,7 +100,7 @@ def rjust(s, n, c=None):
 
 
 def gzipc(s, compresslevel=9):
-    io = StringIO.StringIO()
+    io = StringIO()
     gp = gzip.GzipFile(mode='w', compresslevel=compresslevel, fileobj=io)
     gp.write(s)
     gp.close()
@@ -109,7 +109,7 @@ def gzipc(s, compresslevel=9):
 
 
 def gzipd(s):
-    return gzip.GzipFile(fileobj=StringIO.StringIO(s)).read()
+    return gzip.GzipFile(fileobj=StringIO(s)).read()
 
 
 #######################
