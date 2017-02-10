@@ -133,7 +133,10 @@ def _gdb_break(self, addr, need_interrupt=False):
         self.c()
         return
 
-    if type(addr) == int or type(addr) == long:
+    if type(addr) == list or type(addr) == tuple:
+        for one in addr:
+            _gdb_break(self, one)
+    elif type(addr) == int or type(addr) == long:
         self.sendline('b *0x{0:x}'.format(addr))
     else:
         self.sendline('b {0}'.format(addr))
