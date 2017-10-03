@@ -96,7 +96,7 @@ Then you can update this tool by simply executing `git pull`.
 
 ## LICENSE
 
-GPL
+MIT
 
 [zio]: https://github.com/zTrix/zio
 [pwntools]: https://github.com/Gallopsled/pwntools
