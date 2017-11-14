@@ -116,10 +116,10 @@ def gzipd(s):
 ### utils for debug ###
 #######################
 
-def debug(args, shell=False, executable=None, cwd=None, env=None, timeout=pwnlib.timeout.Timeout.default):
+def debug(args, **kwargs):
     if type(args) == str:
         args = [args]
-    io = process(['gdb', args[0]], shell, executable, cwd, env, timeout)
+    io = process(['gdb', args[0]], **kwargs)
     io.debug_mode = True
     io.sendline('set prompt {0} '.format(term.text.bold_red('gdb$')))
     io.sendline('set args ' + ' '.join(args[1:]))
