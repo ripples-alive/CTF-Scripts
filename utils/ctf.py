@@ -162,7 +162,7 @@ def _gdb_interrupt(self, timeout=0.1):
         buf = self.recvrepeat(timeout)
         _gdb_interrupt(self, 0)
         # Make sure the process has been interrupted.
-        buf += self.recvuntil(term.text.bold_red('gdb$'))
+        buf += self.recvuntil(term.text.bold_red('gdb$'), timeout=timeout)
         self.unrecv(buf)
         return
 
