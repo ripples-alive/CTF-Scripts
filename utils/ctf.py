@@ -10,8 +10,15 @@ import pwn
 from pwn import *
 
 __all__ = [
-    'factor', 'gcd', 'ext_euclid', 'rsa_decrypt',
-    'unhex', 'ljust', 'rjust', 'gzipc', 'gzipd',
+    'factor',
+    'gcd',
+    'ext_euclid',
+    'rsa_decrypt',
+    'unhex',
+    'ljust',
+    'rjust',
+    'gzipc',
+    'gzipd',
     'debug',
     'shellcode',
 ]
@@ -20,10 +27,10 @@ __all__ = [
 __all__ += [i for i in dir(pwn) if not i.startswith('__')]
 __all__ = list(set(__all__))
 
-
 #############################
 ### utils for calculation ###
 #############################
+
 
 def factor(n):
     """Integer factorization (Prime decomposition)."""
@@ -74,6 +81,7 @@ def rsa_decrypt(c, e, p, q):
 ### utils for EXP writing ###
 #############################
 
+
 def unhex(s):
     """Hex decode strings.
     Override unhex in pwntools.
@@ -115,6 +123,7 @@ def gzipd(s):
 #######################
 ### utils for debug ###
 #######################
+
 
 def debug(args, **kwargs):
     if type(args) == str:
@@ -325,7 +334,6 @@ pwnlib.tubes.tube.tube._recvregex = pwnlib.tubes.tube.tube.recvregex
 pwnlib.tubes.tube.tube.recvregex = _recvregex
 pwnlib.tubes.tube.tube._recvline_regex = pwnlib.tubes.tube.tube.recvline_regex
 pwnlib.tubes.tube.tube.recvline_regex = _recvline_regex
-
 
 #################################
 ### a short shellcode for x86 ###
