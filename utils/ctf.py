@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 # encoding:utf-8
 
-import os
+import commands
 import gzip
-import signal
+import os
+import re
+import weakref
 from cStringIO import StringIO
 
 import pwn
@@ -19,7 +21,6 @@ __all__ = [
     'rjust',
     'gzipc',
     'gzipd',
-    'debug',
     'shellcode',
 ]
 
@@ -120,63 +121,245 @@ def gzipd(s):
     return gzip.GzipFile(fileobj=StringIO(s)).read()
 
 
+###############################
+### tmux related operations ###
+###############################
+
+INTERVAL = 0.1
+
+
+def in_tmux():
+    return 'TMUX' in os.environ
+
+
+def tmux_get_pane_list():
+    status, output = commands.getstatusoutput('tmux list-panes')
+    if status != 0:
+        error('failed: tmux list-panes\n%s', output)
+        return
+
+    pane_pattern = re.compile('^%\d+$')
+    pane_list = []
+    for line in output.split('\n'):
+        for word in line.split()[::-1]:
+            if pane_pattern.match(word):
+                pane_list.append(word)
+                break
+    return pane_list
+
+
+def tmux_find_new_pane(callback):
+    pane_list = tmux_get_pane_list()
+    ret = callback()
+    while True:
+        new_pane_list = tmux_get_pane_list()
+        diff = set(new_pane_list) - set(pane_list)
+        if diff:
+            pane_id = diff.pop()
+            log.debug('new pane id: %s', pane_id)
+            return Tmux(pane_id), ret
+
+
+class Tmux(object):
+
+    def __init__(self, pane_id):
+        self.pane_id = pane_id
+
+    def send_keys(self, *args):
+        for key in args:
+            cmd = 'tmux send-keys -t {} "{}"'.format(self.pane_id, key)
+            log.debug('command: %s', cmd)
+            status, output = commands.getstatusoutput(cmd)
+            if status != 0:
+                error('failed: tmux send-keys\n%s', output)
+
+    def sendline(self, data):
+        self.send_keys(data, 'C-m')
+
+    def capture(self, start=None, stop=None):
+        cmd = 'tmux capture-pane -pt {}'.format(self.pane_id)
+        if start is not None:
+            cmd += ' -S {}'.format(start)
+        if stop is not None:
+            cmd += ' -E {}'.format(stop)
+        log.debug('command: %s', cmd)
+        status, output = commands.getstatusoutput(cmd)
+        if status != 0:
+            error('failed: tmux capture-pane\n%s', output)
+        return output
+
+    def get_last_line(self, count=1):
+        output = self.capture()
+        while True:
+            time.sleep(INTERVAL)
+            new_output = self.capture()
+            if output == new_output:
+                break
+            output = new_output
+        return '\n'.join(output.split('\n')[-count:])
+
+
 #######################
 ### utils for debug ###
 #######################
 
 
-def debug(args, **kwargs):
-    if type(args) == str:
-        args = [args]
-    io = process(['gdb', args[0]], **kwargs)
-    io.debug_mode = True
-    io.sendline('set prompt {0} '.format(term.text.bold_red('gdb$')))
-    io.sendline('set args ' + ' '.join(args[1:]))
-    return io
+def _gdb_debug(arg, gdbscript=None, *args, **kwargs):
+
+    def do_debug():
+        return pwnlib.gdb._debug(arg, gdbscript=gdbscript, *args, **kwargs)
+
+    if context.noptrace or not in_tmux():
+        return do_debug()
+
+    tmux, tube = tmux_find_new_pane(do_debug)
+    while not tmux.capture(start=-1).strip():
+        time.sleep(INTERVAL)
+    tube.gdb = GDB(tmux)
+    tube.gdb.detachable = False
+    return tube
 
 
-def _gdb_break(self, addr, need_interrupt=False):
-    if need_interrupt:
-        self.interrupt()
-        _gdb_break(self, addr)
-        self.c()
+def _gdb_attach(target, gdbscript=None, *args, **kwargs):
+
+    def do_attach():
+        return pwnlib.gdb._attach(target, gdbscript=gdbscript, *args, **kwargs)
+
+    if context.noptrace or not in_tmux():
+        return do_attach()
+
+    # if gdbscript is a file object, then read it; we probably need to run some
+    # more gdb script anyway
+    if isinstance(gdbscript, file):
+        with gdbscript:
+            gdbscript = gdbscript.read()
+    gdbscript = gdbscript or ''
+    gdbscript = 'set prompt {0} \n{1}'.format(
+        term.text.bold_red('gdb$'), gdbscript)
+
+    if not isinstance(target, pwnlib.tubes.tube.tube):
+        return do_attach()
+
+    if target.gdb.is_attached():
+        log.warn('debugger is already attached, skip')
         return
 
-    if type(addr) == list or type(addr) == tuple:
-        for one in addr:
-            _gdb_break(self, one)
-    elif type(addr) == int or type(addr) == long:
-        self.sendline('b *0x{0:x}'.format(addr))
-    else:
-        self.sendline('b {0}'.format(addr))
+    tmux, ret = tmux_find_new_pane(do_attach)
+    target.gdb = GDB(tmux)
+    return ret
 
 
-def _gdb_run(self):
-    message = "Starting to run program %r" % self.program
-    with log.progress(message) as p:
-        self.sendline('r')
-        while not proc.children(proc.pidof(self)[0]):
-            sleep(0.01)
+class _FakeGDB(object):
+
+    def __init__(self, tube):
+        self._tube = weakref.ref(tube)
+
+    def attach(self, *args, **kwargs):
+        if context.noptrace:
+            log.warn_once("Skipping debug attach since context.noptrace==True")
+            return
+        pwnlib.gdb.attach(self._tube(), *args, **kwargs)
+
+    def __getattr__(self, key):
+        return lambda *args, **kwargs: None
 
 
-def _gdb_continue(self):
-    message = "Continuing to run program %r" % self.program
-    with log.progress(message) as p:
-        self.sendline('c')
-        self.recvline_endswith('Continuing.')
+class GDB(object):
+
+    def __init__(self, tmux):
+        if not isinstance(tmux, Tmux):
+            tmux = Tmux(tmux)
+        self._tmux = tmux
+        self._attached = True
+        self._target_pid = self.get_pid()
+        self.detachable = True
+
+    def is_attached(self):
+        return self._attached
+
+    def is_running(self):
+        if not self.is_attached():
+            return False
+        return 'gdb$' not in self.get_last_line()
+
+    def is_paused(self):
+        if not self.is_attached():
+            return False
+        return 'gdb$' in self.get_last_line()
+
+    def attach(self, *args, **kwargs):
+        if self._attached:
+            return
+
+        self.execute('attach {:d}'.format(self._target_pid))
+        self._attached = True
+
+    def detach(self):
+        if not self._attached:
+            return
+        if not self.detachable:
+            self.c()
+            return
+
+        self.execute('detach', 1)
+        self._attached = False
+
+    def interrupt(self):
+        if not self.is_running():
+            return
+
+        self.send('C-c')
+        while not self.is_paused():
+            time.sleep(INTERVAL)
+
+    def execute(self, cmd, output_line=1):
+        is_paused = self.is_paused()
+        if not is_paused:
+            self.interrupt()
+        self.sendline(cmd)
+        output = self.get_last_line(output_line + 1)
+        output = output.rsplit('\n', 1)[0]
+        if not is_paused:
+            self.c()
+        return output
+
+    def c(self):
+        if not self.is_paused():
+            return
+        self.execute('c')
+
+    def b(self, addr):
+        if not self.is_attached():
+            return
+
+        if type(addr) == list or type(addr) == tuple:
+            for one in addr:
+                self.b(one)
+        elif type(addr) == int or type(addr) == long:
+            self.execute('b *0x{0:x}'.format(addr))
+        else:
+            self.execute('b {0}'.format(addr))
+
+    def send(self, *data):
+        self._tmux.send_keys(*data)
+
+    def sendline(self, data):
+        self.send(data, 'C-m')
+
+    def get_last_line(self, count=1):
+        return self._tmux.get_last_line(count=count)
+
+    def get_pid(self):
+        return int(self.execute('pid'))
+
+    def get_base(self, name='code'):
+        output = self.execute('{}base'.format(name))
+        return int(output.rsplit(':', 1)[1], 0)
 
 
-def _gdb_interrupt(self, timeout=0.1):
-    if timeout:
-        buf = self.recvrepeat(timeout)
-        _gdb_interrupt(self, 0)
-        # Make sure the process has been interrupted.
-        buf += self.recvuntil(term.text.bold_red('gdb$'), timeout=timeout)
-        self.unrecv(buf)
-        return
-
-    for child in proc.children(proc.pidof(self)[0]):
-        os.kill(child, signal.SIGINT)
+def _tube_init(self, *args, **kwargs):
+    self._init(*args, **kwargs)
+    self.gdb = _FakeGDB(self)
 
 
 def _ext_interactive(self, prompt=term.text.bold_red('$') + ' '):
@@ -188,12 +371,7 @@ def _ext_interactive(self, prompt=term.text.bold_red('$') + ' '):
     Thus it only works in while in :data:`pwnlib.term.term_mode`.
     """
 
-    def handler(signum, frame):
-        self.interrupt(0)
-
-    old_handler = signal.signal(signal.SIGINT, handler)
-
-    log.info('Switching to extensive interactive mode')
+    self.info('Switching to interactive mode')
 
     go = threading.Event()
 
@@ -201,11 +379,12 @@ def _ext_interactive(self, prompt=term.text.bold_red('$') + ' '):
         while not go.isSet():
             try:
                 cur = self.recv(timeout=0.05)
+                cur = cur.replace('\r\n', '\n')
                 if cur:
-                    sys.stderr.write(cur)
-                    sys.stderr.flush()
+                    sys.stdout.write(cur)
+                    sys.stdout.flush()
             except EOFError:
-                log.info('Got EOF while reading in interactive')
+                self.info('Got EOF while reading in interactive')
                 break
 
     t = context.Thread(target=recv_thread)
@@ -215,24 +394,15 @@ def _ext_interactive(self, prompt=term.text.bold_red('$') + ' '):
     try:
         while not go.isSet():
             if term.term_mode:
-                if self.debug_mode:
-                    data = term.readline.readline(prompt='', float=True)
-                else:
-                    data = term.readline.readline(prompt=prompt, float=True)
+                data = term.readline.readline(prompt=prompt, float=True)
             else:
                 data = sys.stdin.readline()
 
             if data:
-                # continue and exit interactive mode
                 try:
-                    if data.strip() == 'c!':
-                        go.set()
-                        sleep(0.05)
-                        self.c()
-                    else:
-                        data = safeeval.const(
-                            '"""{0}"""'.format(data.replace('"', r'\"')))
-                        self.send(data)
+                    data = safeeval.const(
+                        '"""{0}"""'.format(data.replace('"', r'\"')))
+                    self.send(data)
                 except ValueError:
                     log.warning('Illegal input, ignored!')
                 except EOFError:
@@ -246,8 +416,6 @@ def _ext_interactive(self, prompt=term.text.bold_red('$') + ' '):
 
     while t.is_alive():
         t.join(timeout=0.1)
-
-    signal.signal(signal.SIGINT, old_handler)
 
 
 def _send(self, data):
@@ -317,12 +485,13 @@ def _recvline_regex(self, regex, exact=False, group=None, **kwargs):
     return match.group(group)
 
 
-pwnlib.tubes.tube.tube.debug_mode = False
-pwnlib.tubes.tube.tube.b = _gdb_break
-pwnlib.tubes.tube.tube.r = _gdb_run
-pwnlib.tubes.tube.tube.c = _gdb_continue
-pwnlib.tubes.tube.tube.interrupt = _gdb_interrupt
+pwnlib.gdb._debug = pwnlib.gdb.debug
+pwnlib.gdb.debug = _gdb_debug
+pwnlib.gdb._attach = pwnlib.gdb.attach
+pwnlib.gdb.attach = _gdb_attach
 
+pwnlib.tubes.tube.tube._init = pwnlib.tubes.tube.tube.__init__
+pwnlib.tubes.tube.tube.__init__ = _tube_init
 pwnlib.tubes.tube.tube._interactive = pwnlib.tubes.tube.tube.interactive
 pwnlib.tubes.tube.tube.interactive = _ext_interactive
 pwnlib.tubes.tube.tube._send = pwnlib.tubes.tube.tube.send
